@@ -1,0 +1,94 @@
+LIST OF FILES:
+run.py : The code which implements the 'Association Rule Mining'
+INTEGRATED-DATASET.csv : The input to the program
+
+files to build the INTEGRATED-DATASET from the scratch if you want to otherwise you can ignore these and ignore “RECONSTRUCT THE INTEGRATED-DATASET”:
+1. School_Progress_Reports_-_All_Schools_-_2009-10.csv
+2. School_Progress_Reports_-_All_Schools_-_2010-11.csv
+3. School_District_Breakdowns.csv
+4. DistrictTable.csv
+
+=======================================
+RECONSTRUCT THE INTEGRATED-DATASET:
+
+When you download the first two datasets you should delete all the columns that have the word 'SCORE' in them, we only keep those that have the word 'GRADE' in the column  attributes. We did that because scores are float numbers and they never have the chance of being in a rule or frequent set. However grades are letter grades which can be used in "Association Rule Mining". Other columns to be filtered out from the first two datasets are:
+- 2009-2010 ADDITIONAL CREDIT from 1
+- 2010-2011 ADDITIONAL CREDIT from 2
+- PRINCIPAL from 1 & 2
+- PEER INDEX from 1 & 2
+-You only delete DISTRICT AND SCHOOL from one of 1 or 2 and keep it in one of the datasets. This is done to prevent duplication of columns when the two tables are merged.
+
+From the 3rd table you only keep the first column 'JURISDICTION NAME'
+We used this column to create our DistrictTable.csv manually which indicates that CSD (or district 1) is Manhattan and CSD 2 is Manhattan and so on and so forth.
+
+Merging tables:
+We used R (http://www.r-project.org/) to merge tables:
+> table1 = read.csv("School_Progress_Reports_-_All_Schools_-_2009-10.csv", header = TRUE, sep = ",", quote = "\"", dec = ".", fill = TRUE, comment.char = "")
+
+> table2 = read.csv("School_Progress_Reports_-_All_Schools_-_2010-11.csv", header = TRUE, sep = ",", quote = "\"", dec = ".", fill = TRUE, comment.char = "")
+
+> total <- merge(table1, table2, by="DBN")
+
+Next we merge total table with table #4 to get the district names for better readbility of the dataset and also for some variations of min_conf and min_sup, they might also appear in the rules.
+
+>write.csv(total, file = "INTEGRATED-DATASET.csv", append = FALSE, quote = TRUE, sep = " ",eol = "\n", na = "NA", dec = ".", row.names = TRUE,col.names = TRUE, qmethod = c("escape", "double"),fileEncoding = "")
+
+After this step we have the two datasets merged and then you can delete DBN column because it is not needed any longer.
+
+What are of interest in this file are the columns :
+
+(From table #1: )
+'X2009.2010.OVERALL.GRADE'	
+'X2009.2010.ENVIRONMENT.GRADE'	
+'X2009.2010.PERFORMANCE.GRADE'	
+'X2009.2010.PROGRESS.GRADE'	
+'X2008.09.PROGRESS.REPORT.GRADE'
+(From table #2: )
+'X2010.2011.OVERALL.GRADE'	
+'X2010.2011.ENVIRONMENT.GRADE'	
+'X2010.2011.PERFORMANCE.GRADE'	
+'X2010.2011.PROGRESS.GRADE'	
+'X2009.10.PROGRESS.REPORT.GRADE'
+
+Using this dataset we can extract some interesting rules showing similar progress trends across schools for education year 2009-10 to education year 2010-11. Leaving only letter grades allowed us to extract association rules using various min_conf and min_sup values.
+
+Since the entries for the columns mentioned above are mainly letter grades (i.e. A,B,C, ...) for better readability in our association rules we include to which column the 'item' (i.e. A or B or etc) belongs to. Besides, we have records of consecutive education years (i.e., 2008-09, 2009-10, 2010-11), so the mined rules may indicate the relations between grades in different years. In the same year, the mined rules can also point the relations between each types of grades (i.e., OVERALL, ENVIRONMENT, PERFORMANCE, PROGRESS, and PROGESS.REPORT). We asked the TA and he confirmed that we can have this implementation. So our rules have the following structure:
+
+[(X2009.2010.PROGRESS.GRADE = A)] => [(X2008.09.PROGRESS.REPORT.GRADE = A)] (confidence = 85%, support = 22%)
+ Which implies that with 85% confidence and support of 22% if a school.progress.grade was A in 2009.2010, then its progress.report.grade was also A in the year 2008-09.
+
+[(X2009.2010.ENVIRONMENT.GRADE = A), (X2010.2011.ENVIRONMENT.GRADE = A )] => [(X2008.2009.PROGRESS.REPORT.GRADE = A)] (confidence = 86%, support = 21%)
+ Which implies that with 86% confidence and support of 21% if a school.environment.grade was A in the second and third education years, then its progress.report.grade was also A in the first year.
+
+We think such rules are interesting in seeing how schools improved or worsened.
+
+
+=======================================
+HOW TO RUN THE CODE:
+python run.py INTEGRATED-DATASET.csv  <min_sup>  <min_conf>
+where -
+* <min_sup> is the minimum support required.
+* <min_cof> is the minimum confidence required.
+e.x. python run.py INTEGRATED-DATASET.csv 0.2 0.8
+
+=======================================
+INTERNAL DESIGN OF THE CODE:
+
+(The code is well commented so for better understanding you might as well look at that too)
+
+We read the INTEGRATED-DATASET and we first get L1 which is largest 1-itemsets. To do that we have a method called "large1item_set_gen(tablename, min_sup, sup_table)". We saved thes sets of 1 items with this structure : id_i_item, where i is the column the item comes from. We use this structure so that when we want to print the rules instead of i we print the columns name (Please see the explanation for the example rule above). Duplicates are removed from L1. In the next step in large1item_set_gen we filter out those who does not meet the criteria of having support greater than or equal to min support. We sent the final L1 back to our main method as well as other parameters that will be used in later steps.
+Using L1 we start the a-priori alogorithm by calling candidate_gen(largeset, k) methods which uses the previous large set to create the candidate list of k-items. For candidate generation we implemented what was mentioned in the reference paper. So each candidate in candidate_list is created using the (Insert in Ck) described in the paper. When the each candidate for candidate_list is generated then we check for this newly generated candidate that any subset of size k-items of this candidate belongs to L(k-1). For those that all its subset of size k-1 are present in we add that to the final Ck list. Next we Scan the table to get the supports for each itemset in Ck, and filter them by min_sup to get the largeset Lk. Also for those that pass the min_sup criteria, their itemset's support (i.e. support of (dairy, ink, pen) in L3) is added to a global dictionary for which the key is (dairy,ink,pen) and value is support of (dairy,ink,pen) in the dataset. We use this dictionary later to compute the confidence of each rule. We continue creating Lk until it has no members. Next step we print the frequent itemsets sorted by their support in decreasing order.
+Next step, we call the method conf_compute which computes rules of an itemset of size > 2 and computes its confidence. Those that pass the the min_conf criteria will be added to the rule_confs list. We use the formula given in class to compute the confidence of each rule by using the support of union of LHS and RHS divided by support of LHS. Finally we sort the rules in decreasing order of their confidence and print them to the screen.
+
+=======================================
+COMMAND LINE SPECIFICATION:
+
+python run.py INTEGRATED-DATASET.csv min_sup min_conf
+
+
+
+
+ 
+
+
+
